@@ -4,6 +4,10 @@ const secret = process.env.JWT_SECRET || "DevelopmentSecret";
 const accessSecret = process.env.ACCESS_SECRET;
 const refreshSecret = process.env.REFRESH_SECRET;
 
+const generateAdminToken = (username) => {
+    return jwt.sign({ username }, secret, { expiresIn: '7d' });
+};
+
 const generateToken = (userId, phoneNumber) => {
     return jwt.sign({ userId, phoneNumber }, secret, { expiresIn: '7d' });
 };
@@ -29,4 +33,4 @@ const verifyRefreshToken = (token) => {
 };
 
 
-module.exports = { generateToken, generateAccessToken, generateRefreshToken, verifyAccessToken, verifyRefreshToken };
+module.exports = { generateAdminToken, generateToken, generateAccessToken, generateRefreshToken, verifyAccessToken, verifyRefreshToken };

@@ -11,7 +11,7 @@ const placeRoute = require("./routes/place.routes");
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3085;
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
@@ -27,5 +27,5 @@ app.use("/place", placeRoute);
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on http://localhost:${PORT}`);
 });
