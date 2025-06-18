@@ -1,11 +1,13 @@
 const express = require("express");
 const router = express.Router();
+
+const compression = require("compression");
 const {
   getPlaces,
   getNearbyPlaces,
   refreshAllPlacesByGooglePlaceAPI,
+  occupancyUpdate,
 } = require("../controllers/place.controller");
-const compression = require("compression");
 
 router.use(compression());
 
@@ -15,5 +17,6 @@ router.post(
   "/refreshAllPlacesByGooglePlaceAPI",
   refreshAllPlacesByGooglePlaceAPI
 );
+router.post("/occupancy/update", occupancyUpdate);
 
 module.exports = router;

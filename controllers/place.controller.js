@@ -3,33 +3,17 @@ const {
   crawlAndStorePlaces,
   getPaginatedPlaces,
 } = require("../services/googlePlaces.service");
-require("dotenv").config({ path: "../.env" });
 
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
+
 const SEARCH_RADIUS_METERS = 500;
+
 const CITY_BOUNDS = {
   north: 32.9, // Roughly extending to the northern edge of the top row of pins
   south: 32.55, // Roughly extending to the southern edge of the bottom row of pins, including Chula Vista
   east: -116.9, // Roughly extending to the eastern edge of the rightmost column of pins
   west: -117.27, // Roughly extending to the western edge of the leftmost column of pins, well into the ocean
 };
-
-const isValidCityBounds = (bounds) => {
-  if (
-    typeof bounds !== "object" ||
-    bounds === null ||
-    typeof bounds.north !== "number" ||
-    typeof bounds.south !== "number" ||
-    typeof bounds.east !== "number" ||
-    typeof bounds.west !== "number"
-  ) {
-    return false;
-  }
-  return true;
-};
-
-const isValidVenueTypes = (types) =>
-  Array.isArray(types) && types.every((t) => typeof t === "string");
 
 const getPlaces = async (req, res) => {
   try {
@@ -52,17 +36,55 @@ const getNearbyPlaces = async (req, res) => {
         .json({ error: "Latitude and longitude are required." });
     }
 
-    const places = await db("places").whereRaw(
-      `ST_DWithin(location_geo, ST_SetSRID(ST_MakePoint(?, ?), 4326), ?)`,
-      [longitude, latitude, radius]
-    );
+    // const places = await db("places").whereRaw(
+    //   `ST_DWithin(location_geo, ST_SetSRID(ST_MakePoint(?, ?), 4326), ?)`,
+    //   [longitude, latitude, radius]
+    // );
 
-    res.json({ data: places });
+    const subquery = db("occupancy_data")
+      .select("places_google_place_id")
+      .max("timestamp as latest_timestamp")
+      .groupBy("places_google_place_id")
+      .as("latest");
+
+    const occupancyData = await db("occupancy_data as o")
+      .join("places as p", "p.id", "o.places_google_place_id")
+      .join(subquery, function () {
+        this.on(
+          "o.places_google_place_id",
+          "=",
+          "latest.places_google_place_id"
+        ).andOn("o.timestamp", "=", "latest.latest_timestamp");
+      })
+      .whereRaw(
+        `ST_DWithin(p.location_geo, ST_SetSRID(ST_MakePoint(?, ?), 4326), ?)`,
+        [longitude, latitude, radius]
+      )
+      .select("p.*", "o.*");
+
+    res.json({ data: occupancyData });
   } catch (error) {
     console.error("Error fetching nearby places:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+const isValidCityBounds = (bounds) => {
+  if (
+    typeof bounds !== "object" ||
+    bounds === null ||
+    typeof bounds.north !== "number" ||
+    typeof bounds.south !== "number" ||
+    typeof bounds.east !== "number" ||
+    typeof bounds.west !== "number"
+  ) {
+    return false;
+  }
+  return true;
+};
+
+const isValidVenueTypes = (types) =>
+  Array.isArray(types) && types.every((t) => typeof t === "string");
 
 const refreshAllPlacesByGooglePlaceAPI = async (req, res) => {
   try {
@@ -136,8 +158,41 @@ const refreshAllPlacesByGooglePlaceAPI = async (req, res) => {
   }
 };
 
+const occupancyUpdate = async (req, res) => {
+  const {
+    placeId,
+    occupancy_level = "unknown",
+    occupancy_percentage = null,
+    source = "admin_entry",
+  } = req.body;
+
+  if (!placeId) {
+    return res.status(400).json({ error: "Missing placeId" });
+  }
+
+  try {
+    await db("occupancy_data").insert({
+      places_google_place_id: placeId,
+      timestamp: new Date().toISOString(),
+      occupancy_level,
+      occupancy_percentage,
+      source,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    return res
+      .status(200)
+      .json({ success: true, message: "Occupancy updated" });
+  } catch (error) {
+    console.error("Error updating occupancy:", error);
+    return res.status(500).json({ error: "Failed to update occupancy data" });
+  }
+};
+
 module.exports = {
   getPlaces,
   getNearbyPlaces,
   refreshAllPlacesByGooglePlaceAPI,
+  occupancyUpdate,
 };

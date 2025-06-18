@@ -250,6 +250,24 @@ async function savePlaceToDb(placeData, errorArr = []) {
     // Use upsert (insert or update) to handle existing places and new ones
     await db("places").insert(mappedData).onConflict("id").merge();
 
+    const hasOccupancy = await db("occupancy_data")
+      .where("places_google_place_id", placeData.id)
+      .first();
+
+    if (!hasOccupancy) {
+      const now = new Date().toISOString();
+
+      await db("occupancy_data").insert({
+        places_google_place_id: placeData.id,
+        timestamp: now,
+        occupancy_level: "unknown",
+        occupancy_percentage: null,
+        source: "system_default",
+        created_at: now,
+        updated_at: now,
+      });
+    }
+
     console.log(
       `Successfully saved/updated place: ${
         placeData.displayName?.text || placeData.id
