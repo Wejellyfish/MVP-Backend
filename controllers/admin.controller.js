@@ -17,13 +17,35 @@ const adminLogin = async (req, res) => {
 
 const getUsers = async (req, res) => {
     try {
-        const users = await db('users').select("*").orderBy("created_at", "desc");
-        return res.status(201).json(users);
+        const page = parseInt(req.query.page) || 1;
+        const pageSize = parseInt(req.query.pageSize) || 10;
+
+        const offset = (page - 1) * pageSize;
+
+        const [users, [{ total }]] = await Promise.all([
+            db('users')
+                .select('*')
+                .orderBy('created_at', 'desc')
+                .offset(offset)
+                .limit(pageSize),
+
+            db('users').count('* as total')
+        ]);
+
+        const totalPages = Math.ceil(total / pageSize);
+
+        return res.status(200).json({
+            data: users,
+            totalCount: total,
+            totalPages: totalPages,
+            currentPage: page,
+        });
     } catch (error) {
         console.error("Error fetching users:", error);
         return res.status(500).json({ message: "Internal server error" });
     }
-}
+};
+
 
 
 const getUserById = async (req, res) => {
