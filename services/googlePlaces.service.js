@@ -43,9 +43,8 @@ function generateGridForRadius(north, south, east, west, searchRadiusMeters) {
     )} deg, Lng spacing: ${actualLngSpacing.toFixed(5)} deg`
   );
   console.log(
-    `Estimated points: ${
-      Math.ceil((north - south) / actualLatSpacing) *
-      Math.ceil((east - west) / actualLngSpacing)
+    `Estimated points: ${Math.ceil((north - south) / actualLatSpacing) *
+    Math.ceil((east - west) / actualLngSpacing)
     }`
   );
 
@@ -99,8 +98,7 @@ async function fetchPlacesNearby(types, center, radius, googleAPIKey) {
 
   try {
     console.log(
-      `Fetching ${types.join(",")}s near ${center.latitude},${
-        center.longitude
+      `Fetching ${types.join(",")}s near ${center.latitude},${center.longitude
       } with radius ${radius}m...`
     );
     console.log("headers =>", headers);
@@ -269,17 +267,15 @@ async function savePlaceToDb(placeData, errorArr = []) {
     }
 
     console.log(
-      `Successfully saved/updated place: ${
-        placeData.displayName?.text || placeData.id
+      `Successfully saved/updated place: ${placeData.displayName?.text || placeData.id
       } (ID: ${placeData.id})`
     );
     return true;
   } catch (error) {
     const errorMessage = `Error saving/updating place ${placeData.id}: ${error.message}`;
     errorArr.push({
-      message: `Error saving/updating place ${
-        placeData.displayName?.text || placeData.id
-      }`,
+      message: `Error saving/updating place ${placeData.displayName?.text || placeData.id
+        }`,
       details: error.message,
     });
     console.error(errorMessage);
@@ -342,8 +338,7 @@ async function crawlAndStorePlaces({
     }
 
     console.log(
-      `--- Crawled types: ${venueTypesToCrawl.join(", ")} | Processed: ${
-        seenPlaceIds.size
+      `--- Crawled types: ${venueTypesToCrawl.join(", ")} | Processed: ${seenPlaceIds.size
       } ---`
     );
   } catch (err) {
@@ -377,12 +372,22 @@ async function crawlAndStorePlaces({
   }
 }
 
-async function getPaginatedPlaces(page = 1, pageSize = 20) {
+
+async function getPaginatedPlaces(page = 1, pageSize = 20, search = '') {
   const offset = (page - 1) * pageSize;
 
+  const query = db("places");
+
+  if (search) {
+    query.where(function () {
+      this.where("name", "like", `%${search}%`)
+        .orWhere("formatted_address", "like", `%${search}%`);
+    });
+  }
+
   const [data, countResult] = await Promise.all([
-    db("places").select("*").limit(pageSize).offset(offset),
-    db("places").count("* as total").first(),
+    query.clone().select("*").limit(pageSize).offset(offset),
+    query.clone().count("* as total").first(),
   ]);
 
   const totalCount = parseInt(countResult.total);
@@ -397,6 +402,7 @@ async function getPaginatedPlaces(page = 1, pageSize = 20) {
     data,
   };
 }
+
 
 module.exports = {
   crawlAndStorePlaces,

@@ -15,16 +15,18 @@ const CITY_BOUNDS = {
   west: -117.27, // Roughly extending to the western edge of the leftmost column of pins, well into the ocean
 };
 
+
 const getPlaces = async (req, res) => {
   try {
-    const { page = 1, pageSize = 20 } = req.query;
-    const data = await getPaginatedPlaces(Number(page), Number(pageSize));
+    const { page = 1, pageSize = 20, search = '' } = req.query;
+    const data = await getPaginatedPlaces(Number(page), Number(pageSize), search.trim());
     return res.json(data);
   } catch (error) {
     console.error("Error fetching places:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 };
+
 
 const getNearbyPlaces = async (req, res) => {
   try {
@@ -158,6 +160,7 @@ const refreshAllPlacesByGooglePlaceAPI = async (req, res) => {
   }
 };
 
+
 const occupancyUpdate = async (req, res) => {
   const {
     placeId,
@@ -171,28 +174,81 @@ const occupancyUpdate = async (req, res) => {
   }
 
   try {
-    await db("occupancy_data").insert({
-      places_google_place_id: placeId,
-      timestamp: new Date().toISOString(),
-      occupancy_level,
-      occupancy_percentage,
-      source,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
+    // Check if there's already a row for this placeId
+    const existing = await db("occupancy_data")
+      .where("places_google_place_id", placeId)
+      .first();
 
-    return res
-      .status(200)
-      .json({ success: true, message: "Occupancy updated" });
+    const now = new Date().toISOString();
+
+    if (existing) {
+      // Update the existing record
+      await db("occupancy_data")
+        .where("places_google_place_id", placeId)
+        .update({
+          occupancy_level,
+          occupancy_percentage,
+          source,
+          updated_at: now,
+        });
+
+      return res.status(200).json({
+        success: true,
+        message: "Occupancy updated",
+        action: "updated",
+      });
+    } else {
+      // Insert a new record
+      await db("occupancy_data").insert({
+        places_google_place_id: placeId,
+        timestamp: now,
+        occupancy_level,
+        occupancy_percentage,
+        source,
+        created_at: now,
+        updated_at: now,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Occupancy inserted",
+        action: "inserted",
+      });
+    }
   } catch (error) {
     console.error("Error updating occupancy:", error);
     return res.status(500).json({ error: "Failed to update occupancy data" });
   }
 };
 
+
+const getOccupancyById = async (req, res) => {
+  const { places_google_place_id } = req.params;
+
+  if (!places_google_place_id) {
+    return res.status(400).json({ error: "Missing placeId" });
+  }
+
+  try {
+    const occupancy = await db("occupancy_data")
+      .where({ places_google_place_id })
+      .first();
+
+    if (!occupancy) {
+      return res.status(404).json({ message: "No occupancy data found" });
+    }
+
+    return res.status(200).json(occupancy);
+  } catch (error) {
+    console.error("Error fetching occupancy data:", error);
+    return res.status(500).json({ error: "Failed to fetch occupancy data" });
+  }
+}
+
 module.exports = {
   getPlaces,
   getNearbyPlaces,
   refreshAllPlacesByGooglePlaceAPI,
   occupancyUpdate,
+  getOccupancyById
 };
