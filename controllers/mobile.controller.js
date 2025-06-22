@@ -20,9 +20,9 @@ const sendOtpHandler = async (req, res) => {
         let user = await db('users').where({ phoneNumber }).first();
 
         // If user exists and is already verified, return early.
-        if (user && user.isVerified) {
-            return res.status(200).json({ message: "User already verified", isVerified: true });
-        }
+        // if (user && user.isVerified) {
+        //     return res.status(200).json({ message: "User already verified", isVerified: true });
+        // }
 
         // Send OTP if user is new or existing unverified user
         const response = await sendOTP(phoneNumber);
