@@ -31,6 +31,7 @@ const getPlaces = async (req, res) => {
 const getNearbyPlaces = async (req, res) => {
   try {
     const { latitude, longitude, radius = 5000 } = req.body;
+    const userId = req.user?.id;
 
     if (!latitude || !longitude) {
       return res
@@ -49,20 +50,25 @@ const getNearbyPlaces = async (req, res) => {
       .groupBy("places_google_place_id")
       .as("latest");
 
+
     const occupancyData = await db("occupancy_data as o")
       .join("places as p", "p.id", "o.places_google_place_id")
       .join(subquery, function () {
-        this.on(
-          "o.places_google_place_id",
-          "=",
-          "latest.places_google_place_id"
-        ).andOn("o.timestamp", "=", "latest.latest_timestamp");
+        this.on("o.places_google_place_id", "=", "latest.places_google_place_id")
+          .andOn("o.timestamp", "=", "latest.latest_timestamp");
+      })
+      .leftJoin("favorite_places as f", function () {
+        this.on("f.place_id", "=", "p.id").andOn("f.user_id", "=", db.raw("?", [userId]));
       })
       .whereRaw(
         `ST_DWithin(p.location_geo, ST_SetSRID(ST_MakePoint(?, ?), 4326), ?)`,
         [longitude, latitude, radius]
       )
-      .select("p.*", "o.*");
+      .select(
+        "p.*",
+        "o.*",
+        db.raw("CASE WHEN f.id IS NOT NULL THEN true ELSE false END as isFavorite")
+      );
 
     res.json({ data: occupancyData });
   } catch (error) {
