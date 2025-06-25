@@ -376,21 +376,54 @@ async function crawlAndStorePlaces({
 async function getPaginatedPlaces(page = 1, pageSize = 20, search = '') {
   const offset = (page - 1) * pageSize;
 
-  const query = db("places");
+  // Subquery: Get latest timestamp per place
+  const latestOccupancySubquery = db('occupancy_data')
+    .select('places_google_place_id')
+    .max('timestamp as latest_timestamp')
+    .groupBy('places_google_place_id');
 
+  // Main query: Join places with occupancy_data (latest only)
+  const query = db('places as p')
+    .leftJoin(latestOccupancySubquery.as('latest_occ'), 'p.id', 'latest_occ.places_google_place_id')
+    .leftJoin('occupancy_data as od', function () {
+      this.on('od.places_google_place_id', '=', 'latest_occ.places_google_place_id')
+        .andOn('od.timestamp', '=', 'latest_occ.latest_timestamp');
+    });
+
+  // Apply search filter if present
   if (search) {
     query.where(function () {
-      this.where("name", "like", `%${search}%`)
-        .orWhere("formatted_address", "like", `%${search}%`);
+      this.where('p.name', 'like', `%${search}%`)
+        .orWhere('p.formatted_address', 'like', `%${search}%`);
     });
   }
 
+  // Get paginated results and total count
   const [data, countResult] = await Promise.all([
-    query.clone().select("*").limit(pageSize).offset(offset),
-    query.clone().count("* as total").first(),
+    query.clone()
+      .select(
+        'p.*',
+        'od.occupancy_level',
+        'od.occupancy_percentage'
+      )
+      .limit(pageSize)
+      .offset(offset),
+
+    // Count only on places table with search filter
+    db('places as p')
+      .modify((qb) => {
+        if (search) {
+          qb.where(function () {
+            this.where('p.name', 'like', `%${search}%`)
+              .orWhere('p.formatted_address', 'like', `%${search}%`);
+          });
+        }
+      })
+      .count('* as total')
+      .first()
   ]);
 
-  const totalCount = parseInt(countResult.total);
+  const totalCount = parseInt(countResult.total, 10);
   const totalPages = Math.ceil(totalCount / pageSize);
 
   return {
@@ -402,6 +435,7 @@ async function getPaginatedPlaces(page = 1, pageSize = 20, search = '') {
     data,
   };
 }
+
 
 
 module.exports = {

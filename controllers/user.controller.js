@@ -50,7 +50,8 @@ const getUserProfile = async (req, res) => {
 const updateUserProfile = async (req, res) => {
     try {
         // Multer has already processed the file and body by this point
-        const userId = req.user.id; // From authenticateToken middleware
+        // const userId = req.user.id; // From authenticateToken middleware
+        const userId = 4
         const { fullName, email, city, area, bio } = req.body;
         const profileImageFile = req.file; // This is provided by Multer if a file was uploaded
         const clearProfileImage = req.body.profileImage === 'null' || req.body.profileImage === ''; // Check for explicit clear signal
@@ -140,5 +141,68 @@ const updateUserProfile = async (req, res) => {
 };
 
 
+// Add a place to user's favorites
+const addFavoritePlace = async (req, res) => {
+    const userId = req.user.id;
+    const { placeId } = req.body;
 
-module.exports = { getUserProfile, updateUserProfile };
+    if (!placeId) {
+        return res.status(400).json({ message: 'placeId is required' });
+    }
+
+    try {
+        await db('favorite_places').insert({ user_id: userId, place_id: placeId });
+        res.status(201).json({ message: 'Place added to favorites' });
+    } catch (err) {
+        if (err.code === '23505') {
+            return res.status(409).json({ message: 'Already in favorites' });
+        }
+        console.error('Error adding favorite:', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// Get all favorite places for a user
+const getFavoritePlaces = async (req, res) => {
+    const userId = req.user.id;
+    try {
+        const favorites = await db('favorite_places as fp')
+            .join('places as p', 'p.id', 'fp.place_id')
+            .select('p.*')
+            .where('fp.user_id', userId);
+
+        res.status(200).json({ favorites });
+    } catch (err) {
+        console.error('Error fetching favorites:', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// Remove a favorite place
+const removeFavoritePlace = async (req, res) => {
+    const userId = req.user.id;
+    const { placeId } = req.body;
+
+    if (!placeId) {
+        return res.status(400).json({ message: 'placeId is required' });
+    }
+
+    try {
+        const removed = await db('favorite_places')
+            .where({ user_id: userId, place_id: placeId })
+            .del();
+
+        if (removed) {
+            res.status(200).json({ message: 'Removed from favorites' });
+        } else {
+            res.status(404).json({ message: 'Favorite not found' });
+        }
+    } catch (err) {
+        console.error('Error removing favorite:', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+
+
+module.exports = { getUserProfile, updateUserProfile, addFavoritePlace, getFavoritePlaces, removeFavoritePlace };
