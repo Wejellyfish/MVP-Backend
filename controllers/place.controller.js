@@ -3,10 +3,21 @@ const {
   crawlAndStorePlaces,
   getPaginatedPlaces,
 } = require("../services/googlePlaces.service");
+const { resolvePhotos } = require("../services/googlePhotos.service");
 
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 
 const SEARCH_RADIUS_METERS = 500;
+
+function safeJsonParse(value) {
+  if (value == null) return null;
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
 
 const CITY_BOUNDS = {
   north: 32.9, // Roughly extending to the northern edge of the top row of pins
@@ -69,6 +80,13 @@ const getNearbyPlaces = async (req, res) => {
         "o.*",
         db.raw("CASE WHEN f.id IS NOT NULL THEN true ELSE false END as isFavorite")
       );
+
+    await Promise.all(
+      occupancyData.map(async (venue) => {
+        const raw = typeof venue.photos === "string" ? safeJsonParse(venue.photos) : venue.photos;
+        venue.photos = await resolvePhotos(raw, GOOGLE_API_KEY, 800);
+      })
+    );
 
     res.json({ data: occupancyData });
   } catch (error) {
